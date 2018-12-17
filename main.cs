@@ -48,7 +48,6 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                         }
                                     }
                                 }
-                                sqlinsert_properties = sqlinsert_properties.Where(a => a != null).ToArray();
 
                                 List<string> sqlinsert_values = new List<string>();
                                 Type[] nulltypes = new Type[] { typeof(int?), typeof(DateTime?), typeof(bool?), typeof(decimal?), typeof(double?), typeof(TimeSpan?) };
