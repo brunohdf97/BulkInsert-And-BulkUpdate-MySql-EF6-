@@ -1,4 +1,5 @@
-public static void BulkInsert<T>(this IList<T> entities) where T : class
+
+        public static void BulkInsert<T>(this IList<T> entities) where T : class
         {
             var bd = new Models.Contexto();
             if (entities != null)
@@ -245,8 +246,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                     return;
                 }
 
-                string tabletemp_name = "tmp_t_" + DateTime.Now.Day + DateTime.Now.Hour +
-                                                  DateTime.Now.Second + DateTime.Now.Millisecond;
+                string tabletemp_name = ("tmp_t_" + Guid.NewGuid()).Replace("-", "_");
                 bool temptable_created = false;
                 using (var dbContextTransaction = bd.Database.BeginTransaction())
                 {
