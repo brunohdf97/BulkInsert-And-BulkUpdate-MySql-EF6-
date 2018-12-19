@@ -3,7 +3,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
             var bd = new Models.Contexto();
             if (entities != null)
             {
-                if (entities.Count < 500)
+                if (entities.Count < 100)
                 {
                     bd.Set<T>().AddRange(entities);
                     bd.SaveChanges();
@@ -21,10 +21,15 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                     {
                         if (type != null)
                         {
+                            //var sqlinsert_uniquedt = "'" + string.Format("{0:yyyy-MM-dd hh:mm:ss}", bd.DataServidor()) + "'";
+                            string sqlinsert_uniquedt = Guid.NewGuid() + "";
+                            string sqlinsert_tempfieldname = "temp_bulk_unique_id";
+                            List<string> sqlinsert_primarykeys = new List<string>();
+
                             var properties = type.GetProperties().OrderBy(a => a.CustomAttributes.Any(b => b.GetType().Name == "KeyAttribute")).ToArray();
                             if (properties.Length > 0)
                             {
-                                string[] sqlinsert_properties = new string[properties.Length];
+                                string[] sqlinsert_properties = new string[properties.Length + 1];
                                 bool theyhavejustonekey = properties.Sum(a => a.GetCustomAttributes(false).Count(b => b.GetType().Name == "KeyAttribute")) == 1;
                                 for (int i = 0; i < properties.Length; i++)
                                 {
@@ -32,8 +37,26 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                     var customattributes = property.GetCustomAttributes();
                                     bool isprimarykey = property.GetCustomAttributes(false).Any(a => a.GetType().Name == "KeyAttribute");
                                     bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
+                                    bool isintornullint = property.PropertyType == typeof(int) ||
+                                                             property.PropertyType == typeof(int?);
+                                    bool isvalidint = true;
+                                    if (isprimarykey)
+                                    {
+                                        sqlinsert_primarykeys.Add(property.Name);
+                                        sqlinsert_primarykeys.Add("';'"); //separator for CONCAT MYSQL
+                                        if (isintornullint)
+                                        {
+                                            var firstproperty = entities[0].GetType().GetProperty(property.Name);
+                                            if (firstproperty != null)
+                                            {
+                                                var firstvalue = firstproperty.GetValue(entities[0]);
+                                                isvalidint = ((firstvalue != null && (int)firstvalue != 0) || firstvalue == null);
+                                            }
 
-                                    if (isvalidproperty)
+                                        }
+                                    }
+
+                                    if (isvalidproperty && (!isintornullint || isintornullint && isvalidint))
                                     {
                                         if (isprimarykey)
                                         {
@@ -48,14 +71,18 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                         }
                                     }
                                 }
+                                sqlinsert_properties[properties.Length] = sqlinsert_tempfieldname;
 
                                 List<string> sqlinsert_values = new List<string>();
                                 Type[] nulltypes = new Type[] { typeof(int?), typeof(DateTime?), typeof(bool?), typeof(decimal?), typeof(double?), typeof(TimeSpan?) };
                                 foreach (var entity in entities)
                                 {
                                     var entity_type = entity.GetType();
-                                    var entity_properties = entity_type.GetProperties().OrderBy(a => a.CustomAttributes.Any(b => b.GetType().Name == "KeyAttribute")).ToArray();
-                                    string[] insertintovalue = new string[entity_properties.Length];
+                                    var entity_properties = entity_type.GetProperties()
+                                        .Where(a => sqlinsert_properties.Contains(a.Name))
+                                        .OrderBy(a => a.CustomAttributes.Any(b => b.GetType().Name == "KeyAttribute"))
+                                        .ToArray();
+                                    string[] insertintovalue = new string[entity_properties.Length + 1];
                                     for (int i = 0; i < entity_properties.Length; i++)
                                     {
                                         var entity_property = entity_properties[i];
@@ -107,15 +134,80 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                             }
                                         }
                                     }
+                                    insertintovalue[entity_properties.Length] = "'" + sqlinsert_uniquedt + "'";
                                     insertintovalue = insertintovalue.Where(a => a != null).ToArray();
                                     sqlinsert_values.Add("(" + string.Join(",", insertintovalue) + ")");
+                                }
+
+                                if (!bd.ExisteCampo(tabletoinsert_name, sqlinsert_tempfieldname))
+                                {
+                                    bd.Database.ExecuteSqlCommand(string.Format("ALTER TABLE `{0}` ADD COLUMN `{1}` VARCHAR(255) NULL;", tabletoinsert_name, sqlinsert_tempfieldname));
+                                    bd.Database.ExecuteSqlCommand(string.Format("ALTER TABLE `{0}` ADD INDEX `tempindex_bulk_unique_id` (`{1}`);", tabletoinsert_name, sqlinsert_tempfieldname));
                                 }
 
                                 sqlinsert_properties = sqlinsert_properties.Where(a => a != null).ToArray();
                                 string table_firstvalues = sqlinsert_values[0];
                                 sqlinsert_values.RemoveAt(0);
                                 string sqlinsert = string.Format("INSERT INTO {0} {1} VALUES {2}, {3};", "`" + tabletoinsert_name + "`", "(" + string.Join(",", sqlinsert_properties) + ")", table_firstvalues, string.Join(",", sqlinsert_values));
-                                bd.Database.ExecuteSqlCommand(sqlinsert);
+                                int numrowinserted = bd.Database.ExecuteSqlCommand(sqlinsert);
+
+                                sqlinsert_primarykeys.Add("login");
+                                string sql_select = string.Format("SELECT CONCAT({0}) AS chaves FROM {1} WHERE {2} = {3}",
+                                    string.Join(",", sqlinsert_primarykeys), tabletoinsert_name, sqlinsert_tempfieldname, "'" + sqlinsert_uniquedt + "'");
+                                var primarykeys_inserted = bd.Database.SqlQuery<string>(sql_select).ToList();
+
+                                string[] newsqlinsert_primarykeys = sqlinsert_primarykeys.Where(a => a != "';'").ToArray();
+                                if (primarykeys_inserted.Count > 0)
+                                {
+                                    for (int i = 0; i < primarykeys_inserted.Count; i++)
+                                    {
+                                        var entity = entities[i];
+                                        var entity_type = entity.GetType();
+                                        string[] values = primarykeys_inserted[i].Split(';');
+                                        for (int i2 = 0; i2 < newsqlinsert_primarykeys.Length; i2++)
+                                        {
+                                            var value = values[i2];
+                                            if (newsqlinsert_primarykeys[i2] != null)
+                                            {
+                                                var entity_property = entity_type.GetProperty(newsqlinsert_primarykeys[i2]);
+                                                if (entity_property != null)
+                                                {
+                                                    if (entity_property.PropertyType == typeof(int) || entity_property.PropertyType == typeof(int?))
+                                                    {
+                                                        entity_property.SetValue(entity, value == null ? (int?)null : Convert.ToInt32(value));
+                                                    }
+                                                    else if (entity_property.PropertyType == typeof(DateTime) || entity_property.PropertyType == typeof(DateTime?))
+                                                    {
+                                                        entity_property.SetValue(entity,
+                                                            value == null ? (DateTime?)null : Convert.ToDateTime(value));
+                                                    }
+                                                    else if (nulltypes.Contains(entity_property.PropertyType))
+                                                    {
+                                                        entity_property.SetValue(entity, value == null ? null : value);
+                                                    }
+                                                    else if (entity_property.PropertyType == typeof(bool) || entity_property.PropertyType == typeof(bool?))
+                                                    {
+                                                        entity_property.SetValue(entity, value == null ? (bool?)null : Convert.ToInt32(value) == 1);
+                                                    }
+                                                    else if (entity_property.PropertyType == typeof(double) || entity_property.PropertyType == typeof(double?))
+                                                    {
+                                                        entity_property.SetValue(entity, value == null ? (double?)null : Convert.ToDouble(value));
+                                                    }
+                                                    else if (entity_property.PropertyType == typeof(decimal) || entity_property.PropertyType == typeof(decimal?))
+                                                    {
+                                                        entity_property.SetValue(entity, value == null ? (decimal?)null : Convert.ToDecimal(value));
+                                                    }
+                                                    else
+                                                    {
+                                                        entity_property.SetValue(entity,
+                                                            value == null ? null : value);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
                                 dbContextTransaction.Commit();
                             }
                         }
@@ -134,13 +226,22 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
             var bd = new Models.Contexto();
             if (entities != null)
             {
-                if (entities.Count < 500)
+                if (entities.Count < 100)
                 {
-                    foreach (var entity in entities)
+                    int count = entities.Count - 1;
+                    while (count != -1)
                     {
-                        bd.Entry(entity).State = EntityState.Modified;
+                        for (int i = 0; i < 10; i++, count--)
+                        {
+                            if (count == -1)
+                                break;
+
+                            var entity = entities[count];
+                            bd.Entry(entity).State = EntityState.Modified;
+                        }
+                        bd.SaveChanges();
+
                     }
-                    bd.SaveChanges();
                     return;
                 }
 
@@ -174,8 +275,25 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                     var customattributes = property.GetCustomAttributes();
                                     bool isprimarykey = property.GetCustomAttributes(false).Any(a => a.GetType().Name == "KeyAttribute");
                                     bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
+                                    bool isintornullint = property.PropertyType == typeof(int) ||
+                                                              property.PropertyType == typeof(int?);
+                                    bool isvalidint = true;
+                                    if (isprimarykey)
+                                    {
 
-                                    if (isvalidproperty)
+                                        if (isintornullint)
+                                        {
+                                            var firstproperty = entities[0].GetType().GetProperty(property.Name);
+                                            if (firstproperty != null)
+                                            {
+                                                var firstvalue = firstproperty.GetValue(entities[0]);
+                                                isvalidint = ((firstvalue != null && (int)firstvalue != 0) || firstvalue == null);
+                                            }
+
+                                        }
+                                    }
+
+                                    if (isvalidproperty && (!isintornullint || isintornullint && isvalidint))
                                     {
                                         sqltemp_insertintoproperties[i] = property.Name;
                                         sqlupdate_setters[i] = "a." + property.Name + " = b." + property.Name + "";
@@ -244,26 +362,15 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                         }
                                     }
                                 }
-                                sqltemp_insertintoproperties = sqltemp_insertintoproperties.Where(a => a != null).ToArray();
-                                sqlupdate_setters = sqlupdate_setters.Where(a => a != null).ToArray();
-                                sqlupdate_innerjoin_where = sqlupdate_innerjoin_where.Where(a => a != null).ToArray();
-                                sqltemp_primarykeys = sqltemp_primarykeys.Where(a => a != null).ToArray();
-                                sqltemp_properties = sqltemp_properties.Where(a => a != null).ToArray();
-
-                                //sqltemp_primarykeys = sqltemp_primarykeys.Where(a => a != null).ToArray();
-                                string stemptable_properties = string.Join(",", sqltemp_properties);
-                                string stemptable_keys = string.Join(",", sqltemp_primarykeys);
-
-                                string sqltemptable = string.Format("CREATE TABLE {0}" +
-                                                                    "( {1}, PRIMARY KEY {2} ) ENGINE=InnoDB DEFAULT CHARSET=latin1;", "`" + tabletemp_name + "`", stemptable_properties, "(" + stemptable_keys + ")");
-                                bd.Database.ExecuteSqlCommand(sqltemptable);
 
                                 List<string> sqltemp_insertintovalues = new List<string>();
                                 Type[] nulltypes = new Type[] { typeof(int?), typeof(DateTime?), typeof(bool?), typeof(decimal?), typeof(double?), typeof(TimeSpan?) };
                                 foreach (var entity in entities)
                                 {
                                     var entity_type = entity.GetType();
-                                    var entity_properties = entity_type.GetProperties().OrderBy(a => a.CustomAttributes.Any(b => b.GetType().Name == "KeyAttribute")).ToArray();
+                                    var entity_properties = entity_type.GetProperties()
+                                        .Where(a => sqltemp_insertintoproperties.Contains(a.Name))
+                                        .OrderBy(a => a.CustomAttributes.Any(b => b.GetType().Name == "KeyAttribute")).ToArray();
                                     string[] insertintovalue = new string[entity_properties.Length];
                                     for (int i = 0; i < entity_properties.Length; i++)
                                     {
@@ -316,6 +423,18 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                     insertintovalue = insertintovalue.Where(a => a != null).ToArray();
                                     sqltemp_insertintovalues.Add("(" + string.Join(",", insertintovalue) + ")");
                                 }
+                                sqltemp_insertintoproperties = sqltemp_insertintoproperties.Where(a => a != null).ToArray();
+                                sqlupdate_setters = sqlupdate_setters.Where(a => a != null).ToArray();
+                                sqlupdate_innerjoin_where = sqlupdate_innerjoin_where.Where(a => a != null).ToArray();
+                                sqltemp_primarykeys = sqltemp_primarykeys.Where(a => a != null).ToArray();
+                                sqltemp_properties = sqltemp_properties.Where(a => a != null).ToArray();
+
+                                string stemptable_properties = string.Join(",", sqltemp_properties);
+                                string stemptable_keys = string.Join(",", sqltemp_primarykeys);
+
+                                string sqltemptable = string.Format("CREATE TEMPORARY TABLE {0}" +
+                                                                    "( {1}, PRIMARY KEY {2} ) ENGINE=InnoDB DEFAULT CHARSET=latin1;", "`" + tabletemp_name + "`", stemptable_properties, "(" + stemptable_keys + ")");
+                                bd.Database.ExecuteSqlCommand(sqltemptable);
 
                                 string table_firstvalues = sqltemp_insertintovalues[0];
                                 sqltemp_insertintovalues.RemoveAt(0);
