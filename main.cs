@@ -1,4 +1,4 @@
-public static void BulkInsert<T>(this IList<T> entities) where T : class
+        public static void BulkInsert<T>(this IList<T> entities) where T : class
         {
             var bd = new Models.Contexto();
             if (entities != null)
@@ -34,8 +34,9 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                 for (int i = 0; i < properties.Length; i++)
                                 {
                                     var property = properties[i];
-                                    var customattributes = property.GetCustomAttributes();
-                                    bool isprimarykey = property.GetCustomAttributes(false).Any(a => a.GetType().Name == "KeyAttribute");
+                                    var customattributes = property.GetCustomAttributes(false);
+                                    bool isprimarykey = customattributes.Any(a => a.GetType().Name == "KeyAttribute");
+                                    bool isforeingkey = customattributes.Any(a => a.GetType().Name == "ForeingKeyAttribute");
                                     bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
                                     bool isintornullint = property.PropertyType == typeof(int) ||
                                                              property.PropertyType == typeof(int?);
@@ -56,7 +57,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                         }
                                     }
 
-                                    if (isvalidproperty && (!isintornullint || isintornullint && isvalidint))
+                                    if (!isforeingkey && isvalidproperty && (!isintornullint || isintornullint && isvalidint))
                                     {
                                         if (isprimarykey)
                                         {
@@ -86,7 +87,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                     for (int i = 0; i < entity_properties.Length; i++)
                                     {
                                         var entity_property = entity_properties[i];
-                                        var customattributes = entity_property.GetCustomAttributes();
+                                        var customattributes = entity_property.GetCustomAttributes(false);
                                         bool isprimarykey = customattributes.Any(a => a.GetType().Name == "KeyAttribute");
                                         bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
 
@@ -244,7 +245,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                     return;
                 }
 
-                string tabletemp_name = ("tmp_t_" + Guid.NewGuid()).Replace("-", "_");
+                string tabletemp_name = ("tmp_t_" + Guid.NewGuid()).Replace("-","_");
                 bool temptable_created = false;
                 using (var dbContextTransaction = bd.Database.BeginTransaction())
                 {
@@ -270,8 +271,9 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                 for (int i = 0; i < properties.Length; i++)
                                 {
                                     var property = properties[i];
-                                    var customattributes = property.GetCustomAttributes();
-                                    bool isprimarykey = property.GetCustomAttributes(false).Any(a => a.GetType().Name == "KeyAttribute");
+                                    var customattributes = property.GetCustomAttributes(false);
+                                    bool isprimarykey = customattributes.Any(a => a.GetType().Name == "KeyAttribute");
+                                    bool isforeingkey = customattributes.Any(a => a.GetType().Name == "ForeingKeyAttribute");
                                     bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
                                     bool isintornullint = property.PropertyType == typeof(int) ||
                                                               property.PropertyType == typeof(int?);
@@ -291,7 +293,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                         }
                                     }
 
-                                    if (isvalidproperty && (!isintornullint || isintornullint && isvalidint))
+                                    if (!isforeingkey && isvalidproperty && (!isintornullint || isintornullint && isvalidint))
                                     {
                                         sqltemp_insertintoproperties[i] = property.Name;
                                         sqlupdate_setters[i] = "a." + property.Name + " = b." + property.Name + "";
@@ -374,7 +376,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                     {
                                         var entity_property = entity_properties[i];
                                         var value = entity_property.GetValue(entity);
-                                        var customattributes = entity_property.GetCustomAttributes();
+                                        var customattributes = entity_property.GetCustomAttributes(false);
                                         //bool isprimarykey = entity_property.GetCustomAttributes(false).Any(a => a.GetType().Name == "KeyAttribute");
                                         bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
                                         if (isvalidproperty)
