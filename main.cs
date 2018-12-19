@@ -1,5 +1,4 @@
-
-        public static void BulkInsert<T>(this IList<T> entities) where T : class
+public static void BulkInsert<T>(this IList<T> entities) where T : class
         {
             var bd = new Models.Contexto();
             if (entities != null)
@@ -152,7 +151,6 @@
                                 string sqlinsert = string.Format("INSERT INTO {0} {1} VALUES {2}, {3};", "`" + tabletoinsert_name + "`", "(" + string.Join(",", sqlinsert_properties) + ")", table_firstvalues, string.Join(",", sqlinsert_values));
                                 int numrowinserted = bd.Database.ExecuteSqlCommand(sqlinsert);
 
-                                sqlinsert_primarykeys.Add("login");
                                 string sql_select = string.Format("SELECT CONCAT({0}) AS chaves FROM {1} WHERE {2} = {3}",
                                     string.Join(",", sqlinsert_primarykeys), tabletoinsert_name, sqlinsert_tempfieldname, "'" + sqlinsert_uniquedt + "'");
                                 var primarykeys_inserted = bd.Database.SqlQuery<string>(sql_select).ToList();
