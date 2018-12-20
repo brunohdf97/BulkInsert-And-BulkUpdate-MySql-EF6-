@@ -1,4 +1,4 @@
-        public static void BulkInsert<T>(this IList<T> entities) where T : class
+public static void BulkInsert<T>(this IList<T> entities) where T : class
         {
             var bd = new Models.Contexto();
             if (entities != null)
@@ -26,16 +26,34 @@
                             string sqlinsert_tempfieldname = "temp_bulk_unique_id";
                             List<string> sqlinsert_primarykeys = new List<string>();
 
+                            DatabaseGeneratedOption[] validprimarykeys_options = new DatabaseGeneratedOption[]
+                                                {
+                                                    DatabaseGeneratedOption.Computed, 
+                                                    DatabaseGeneratedOption.Identity, 
+                                                };
                             var properties = type.GetProperties().OrderBy(a => a.CustomAttributes.Any(b => b.GetType().Name == "KeyAttribute")).ToArray();
                             if (properties.Length > 0)
                             {
                                 string[] sqlinsert_properties = new string[properties.Length + 1];
-                                bool theyhavejustonekey = properties.Sum(a => a.GetCustomAttributes(false).Count(b => b.GetType().Name == "KeyAttribute")) == 1;
+                                //bool theyhavejustonekey = properties.Sum(a => a.GetCustomAttributes(false).Count(b => b.GetType().Name == "KeyAttribute")) == 1;
                                 for (int i = 0; i < properties.Length; i++)
                                 {
                                     var property = properties[i];
                                     var customattributes = property.GetCustomAttributes(false);
+
                                     bool isprimarykey = customattributes.Any(a => a.GetType().Name == "KeyAttribute");
+                                    if (isprimarykey)
+                                    {
+                                        DatabaseGeneratedAttribute propdatabasegeneratednone = (DatabaseGeneratedAttribute)customattributes.FirstOrDefault(a => a.GetType().Name == "DatabaseGeneratedAttribute");
+                                        if (propdatabasegeneratednone != null)
+                                        {
+                                            if (!validprimarykeys_options.Contains(propdatabasegeneratednone.DatabaseGeneratedOption))
+                                            {
+                                                isprimarykey = false;
+                                            }
+                                        }
+                                    }
+
                                     bool isforeingkey = customattributes.Any(a => a.GetType().Name == "ForeingKeyAttribute");
                                     bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
                                     bool isintornullint = property.PropertyType == typeof(int) ||
@@ -57,22 +75,13 @@
                                         }
                                     }
 
-                                    if (!isforeingkey && isvalidproperty && (!isintornullint || isintornullint && isvalidint))
+                                    if (!isforeingkey && isvalidproperty && (!isintornullint || isintornullint && isvalidint) && !isprimarykey)
                                     {
-                                        if (isprimarykey)
-                                        {
-                                            if (!theyhavejustonekey)
-                                            {
-                                                sqlinsert_properties[i] = property.Name;
-                                            }
-                                        }
-                                        else
-                                        {
-                                            sqlinsert_properties[i] = property.Name;
-                                        }
+                                        sqlinsert_properties[i] = property.Name;
                                     }
                                 }
                                 sqlinsert_properties[properties.Length] = sqlinsert_tempfieldname;
+                                sqlinsert_properties = sqlinsert_properties.Where(a => a != null).ToArray();
 
                                 List<string> sqlinsert_values = new List<string>();
                                 Type[] nulltypes = new Type[] { typeof(int?), typeof(DateTime?), typeof(bool?), typeof(decimal?), typeof(double?), typeof(TimeSpan?) };
@@ -87,54 +96,67 @@
                                     for (int i = 0; i < entity_properties.Length; i++)
                                     {
                                         var entity_property = entity_properties[i];
-                                        var customattributes = entity_property.GetCustomAttributes(false);
-                                        bool isprimarykey = customattributes.Any(a => a.GetType().Name == "KeyAttribute");
-                                        bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
 
-                                        if (isvalidproperty)
+                                        //var customattributes = entity_property.GetCustomAttributes(false);
+                                        //bool isprimarykey = customattributes.Any(a => a.GetType().Name == "KeyAttribute");
+                                        //bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
+
+                                        //if (isvalidproperty)
+                                        //{
+                                        //if (isprimarykey)
+                                        //{
+                                        //    DatabaseGeneratedAttribute propdatabasegeneratednone = (DatabaseGeneratedAttribute)customattributes.FirstOrDefault(a => a.GetType().Name == "DatabaseGeneratedAttribute");
+                                        //    if (propdatabasegeneratednone != null)
+                                        //    {
+                                        //        if (!validprimarykeys_options.Contains(propdatabasegeneratednone.DatabaseGeneratedOption))
+                                        //        {
+                                        //            isprimarykey = false;
+                                        //        }
+                                        //    }
+                                        //}
+
+                                        //if (!isprimarykey || !theyhavejustonekey)
+                                        //{
+                                        var value = entity_property != null ? entity_property.GetValue(entity) : null;
+                                        if (entity_property.PropertyType == typeof(int) || entity_property.PropertyType == typeof(int?))
                                         {
-                                            if (!isprimarykey || !theyhavejustonekey)
+                                            insertintovalue[i] = value == null ? "NULL" : (value + "");
+                                        }
+                                        else if (entity_property.PropertyType == typeof(bool) || entity_property.PropertyType == typeof(bool?))
+                                        {
+                                            insertintovalue[i] = value == null ? "NULL" : value == "False" ? "0" : "1";
+                                        }
+                                        else if (entity_property.PropertyType == typeof(double) || entity_property.PropertyType == typeof(double?))
+                                        {
+                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",", ".");
+                                        }
+                                        else if (entity_property.PropertyType == typeof(decimal) || entity_property.PropertyType == typeof(decimal?))
+                                        {
+                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",", ".");
+                                        }
+                                        else if (entity_property.PropertyType == typeof(DateTime) || entity_property.PropertyType == typeof(DateTime?))
+                                        {
+                                            if (value == null)
                                             {
-                                                var value = entity_property.GetValue(entity);
-                                                if (entity_property.PropertyType == typeof(int) || entity_property.PropertyType == typeof(int?))
-                                                {
-                                                    insertintovalue[i] = value == null ? "NULL" : value + "";
-                                                }
-                                                else if (entity_property.PropertyType == typeof(bool) || entity_property.PropertyType == typeof(bool?))
-                                                {
-                                                    insertintovalue[i] = value == null ? "NULL" : value == "False" ? "0" : "1";
-                                                }
-                                                else if (entity_property.PropertyType == typeof(double) || entity_property.PropertyType == typeof(double?))
-                                                {
-                                                    insertintovalue[i] = value == null ? "NULL" : value + "".Replace(",", ".");
-                                                }
-                                                else if (entity_property.PropertyType == typeof(decimal) || entity_property.PropertyType == typeof(decimal?))
-                                                {
-                                                    insertintovalue[i] = value == null ? "NULL" : value + "".Replace(",", ".");
-                                                }
-                                                else if (entity_property.PropertyType == typeof(DateTime) || entity_property.PropertyType == typeof(DateTime?))
-                                                {
-                                                    if (value == null)
-                                                    {
-                                                        insertintovalue[i] = "NULL";
-                                                    }
-                                                    else
-                                                    {
-                                                        insertintovalue[i] = "'" + string.Format("{0:yyyy-MM-dd hh:mm:ss}", (DateTime)value) + "'";
+                                                insertintovalue[i] = "NULL";
+                                            }
+                                            else
+                                            {
+                                                insertintovalue[i] = "'" + string.Format("{0:yyyy-MM-dd hh:mm:ss}", (DateTime)value) + "'";
 
-                                                    }
-                                                }
-                                                else if (nulltypes.Contains(entity_property.PropertyType))
-                                                {
-                                                    insertintovalue[i] = value == null ? "NULL" : "'" + value + "'";
-                                                }
-                                                else
-                                                {
-                                                    insertintovalue[i] = value == null ? "NULL" : "'" + value + "'";
-                                                }
                                             }
                                         }
+                                        else if (nulltypes.Contains(entity_property.PropertyType))
+                                        {
+                                            insertintovalue[i] = value == null ? "NULL" : "'" + (value + "").Replace(",", ".") + "'";
+                                        }
+                                        else
+                                        {
+                                            insertintovalue[i] = value == null ? "NULL" : "'" + (value + "").Replace(",", ".") + "'";
+                                        }
                                     }
+                                    //    }
+                                    //}
                                     insertintovalue[entity_properties.Length] = "'" + sqlinsert_uniquedt + "'";
                                     insertintovalue = insertintovalue.Where(a => a != null).ToArray();
                                     sqlinsert_values.Add("(" + string.Join(",", insertintovalue) + ")");
@@ -146,61 +168,64 @@
                                     bd.Database.ExecuteSqlCommand(string.Format("ALTER TABLE `{0}` ADD INDEX `tempindex_bulk_unique_id` (`{1}`);", tabletoinsert_name, sqlinsert_tempfieldname));
                                 }
 
-                                sqlinsert_properties = sqlinsert_properties.Where(a => a != null).ToArray();
+
                                 string table_firstvalues = sqlinsert_values[0];
                                 sqlinsert_values.RemoveAt(0);
                                 string sqlinsert = string.Format("INSERT INTO {0} {1} VALUES {2}, {3};", "`" + tabletoinsert_name + "`", "(" + string.Join(",", sqlinsert_properties) + ")", table_firstvalues, string.Join(",", sqlinsert_values));
                                 int numrowinserted = bd.Database.ExecuteSqlCommand(sqlinsert);
 
-                                string sql_select = string.Format("SELECT CONCAT({0}) AS chaves FROM {1} WHERE {2} = {3}",
-                                    string.Join(",", sqlinsert_primarykeys), tabletoinsert_name, sqlinsert_tempfieldname, "'" + sqlinsert_uniquedt + "'");
-                                var primarykeys_inserted = bd.Database.SqlQuery<string>(sql_select).ToList();
-
-                                string[] newsqlinsert_primarykeys = sqlinsert_primarykeys.Where(a => a != "';'").ToArray();
-                                if (primarykeys_inserted.Count > 0)
+                                if (sqlinsert_primarykeys.Count > 0)
                                 {
-                                    for (int i = 0; i < primarykeys_inserted.Count; i++)
+                                    string sql_select = string.Format("SELECT CONCAT({0}) AS chaves FROM {1} WHERE {2} = {3}",
+                                        string.Join(",", sqlinsert_primarykeys), tabletoinsert_name, sqlinsert_tempfieldname, "'" + sqlinsert_uniquedt + "'");
+                                    var primarykeys_inserted = bd.Database.SqlQuery<string>(sql_select).ToList();
+
+                                    string[] newsqlinsert_primarykeys = sqlinsert_primarykeys.Where(a => a != "';'").ToArray();
+                                    if (newsqlinsert_primarykeys.Length > 0)
                                     {
-                                        var entity = entities[i];
-                                        var entity_type = entity.GetType();
-                                        string[] values = primarykeys_inserted[i].Split(';');
-                                        for (int i2 = 0; i2 < newsqlinsert_primarykeys.Length; i2++)
+                                        for (int i = 0; i < primarykeys_inserted.Count; i++)
                                         {
-                                            var value = values[i2];
-                                            if (newsqlinsert_primarykeys[i2] != null)
+                                            var entity = entities[i];
+                                            var entity_type = entity.GetType();
+                                            string[] values = primarykeys_inserted[i].Split(';');
+                                            for (int i2 = 0; i2 < newsqlinsert_primarykeys.Length; i2++)
                                             {
-                                                var entity_property = entity_type.GetProperty(newsqlinsert_primarykeys[i2]);
-                                                if (entity_property != null)
+                                                var value = values[i2];
+                                                if (newsqlinsert_primarykeys[i2] != null)
                                                 {
-                                                    if (entity_property.PropertyType == typeof(int) || entity_property.PropertyType == typeof(int?))
+                                                    var entity_property = entity_type.GetProperty(newsqlinsert_primarykeys[i2]);
+                                                    if (entity_property != null)
                                                     {
-                                                        entity_property.SetValue(entity, value == null ? (int?)null : Convert.ToInt32(value));
-                                                    }
-                                                    else if (entity_property.PropertyType == typeof(DateTime) || entity_property.PropertyType == typeof(DateTime?))
-                                                    {
-                                                        entity_property.SetValue(entity,
-                                                            value == null ? (DateTime?)null : Convert.ToDateTime(value));
-                                                    }
-                                                    else if (nulltypes.Contains(entity_property.PropertyType))
-                                                    {
-                                                        entity_property.SetValue(entity, value == null ? null : value);
-                                                    }
-                                                    else if (entity_property.PropertyType == typeof(bool) || entity_property.PropertyType == typeof(bool?))
-                                                    {
-                                                        entity_property.SetValue(entity, value == null ? (bool?)null : Convert.ToInt32(value) == 1);
-                                                    }
-                                                    else if (entity_property.PropertyType == typeof(double) || entity_property.PropertyType == typeof(double?))
-                                                    {
-                                                        entity_property.SetValue(entity, value == null ? (double?)null : Convert.ToDouble(value));
-                                                    }
-                                                    else if (entity_property.PropertyType == typeof(decimal) || entity_property.PropertyType == typeof(decimal?))
-                                                    {
-                                                        entity_property.SetValue(entity, value == null ? (decimal?)null : Convert.ToDecimal(value));
-                                                    }
-                                                    else
-                                                    {
-                                                        entity_property.SetValue(entity,
-                                                            value == null ? null : value);
+                                                        if (entity_property.PropertyType == typeof(int) || entity_property.PropertyType == typeof(int?))
+                                                        {
+                                                            entity_property.SetValue(entity, value == null ? (int?)null : Convert.ToInt32(value));
+                                                        }
+                                                        else if (entity_property.PropertyType == typeof(DateTime) || entity_property.PropertyType == typeof(DateTime?))
+                                                        {
+                                                            entity_property.SetValue(entity,
+                                                                value == null ? (DateTime?)null : Convert.ToDateTime(value));
+                                                        }
+                                                        else if (nulltypes.Contains(entity_property.PropertyType))
+                                                        {
+                                                            entity_property.SetValue(entity, value == null ? null : value);
+                                                        }
+                                                        else if (entity_property.PropertyType == typeof(bool) || entity_property.PropertyType == typeof(bool?))
+                                                        {
+                                                            entity_property.SetValue(entity, value == null ? (bool?)null : Convert.ToInt32(value) == 1);
+                                                        }
+                                                        else if (entity_property.PropertyType == typeof(double) || entity_property.PropertyType == typeof(double?))
+                                                        {
+                                                            entity_property.SetValue(entity, value == null ? (double?)null : Convert.ToDouble(value));
+                                                        }
+                                                        else if (entity_property.PropertyType == typeof(decimal) || entity_property.PropertyType == typeof(decimal?))
+                                                        {
+                                                            entity_property.SetValue(entity, value == null ? (decimal?)null : Convert.ToDecimal(value));
+                                                        }
+                                                        else
+                                                        {
+                                                            entity_property.SetValue(entity,
+                                                                value == null ? null : value);
+                                                        }
                                                     }
                                                 }
                                             }
@@ -245,18 +270,25 @@
                     return;
                 }
 
-                string tabletemp_name = ("tmp_t_" + Guid.NewGuid()).Replace("-","_");
+                string tabletemp_name = ("tmp_t_" + Guid.NewGuid()).Replace("-", "_");
                 bool temptable_created = false;
                 using (var dbContextTransaction = bd.Database.BeginTransaction())
                 {
                     try
                     {
+
                         var type = typeof(T);
                         var objadpter = (bd as IObjectContextAdapter).ObjectContext.CreateObjectSet<T>();
                         var objadptervalue = objadpter.EntitySet.MetadataProperties.FirstOrDefault(a => a.Name == "Configuration").Value;
                         string tabletoupdate_name = objadptervalue.GetType().GetProperty("TableName").GetValue(objadptervalue) + "";
                         if (type != null)
                         {
+
+                            DatabaseGeneratedOption[] validprimarykeys_options = new DatabaseGeneratedOption[]
+                                                {
+                                                    DatabaseGeneratedOption.Computed, 
+                                                    DatabaseGeneratedOption.Identity, 
+                                                };
                             var properties = type.GetProperties().OrderBy(a => a.CustomAttributes.Any(b => b.GetType().Name == "KeyAttribute")).ToArray();
                             if (properties.Length > 0)
                             {
@@ -273,6 +305,17 @@
                                     var property = properties[i];
                                     var customattributes = property.GetCustomAttributes(false);
                                     bool isprimarykey = customattributes.Any(a => a.GetType().Name == "KeyAttribute");
+                                    if (isprimarykey)
+                                    {
+                                        DatabaseGeneratedAttribute propdatabasegeneratednone = (DatabaseGeneratedAttribute)customattributes.FirstOrDefault(a => a.GetType().Name == "DatabaseGeneratedAttribute");
+                                        if (propdatabasegeneratednone != null)
+                                        {
+                                            if (!validprimarykeys_options.Contains(propdatabasegeneratednone.DatabaseGeneratedOption))
+                                            {
+                                                isprimarykey = false;
+                                            }
+                                        }
+                                    }
                                     bool isforeingkey = customattributes.Any(a => a.GetType().Name == "ForeingKeyAttribute");
                                     bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
                                     bool isintornullint = property.PropertyType == typeof(int) ||
@@ -280,7 +323,6 @@
                                     bool isvalidint = true;
                                     if (isprimarykey)
                                     {
-
                                         if (isintornullint)
                                         {
                                             var firstproperty = entities[0].GetType().GetProperty(property.Name);
@@ -376,50 +418,50 @@
                                     {
                                         var entity_property = entity_properties[i];
                                         var value = entity_property.GetValue(entity);
-                                        var customattributes = entity_property.GetCustomAttributes(false);
+                                        //var customattributes = entity_property.GetCustomAttributes(false);
                                         //bool isprimarykey = entity_property.GetCustomAttributes(false).Any(a => a.GetType().Name == "KeyAttribute");
-                                        bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
-                                        if (isvalidproperty)
+                                        //bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
+                                        //if (isvalidproperty)
+                                        //{
+                                        if (entity_property.PropertyType == typeof(int) || entity_property.PropertyType == typeof(int?))
                                         {
-                                            if (entity_property.PropertyType == typeof(int) || entity_property.PropertyType == typeof(int?))
+                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",", ".");
+                                        }
+                                        else if (entity_property.PropertyType == typeof(bool) || entity_property.PropertyType == typeof(bool?))
+                                        {
+                                            insertintovalue[i] = value == null ? "NULL" : value == "False" ? "0" : "1";
+                                        }
+                                        else if (entity_property.PropertyType == typeof(double) || entity_property.PropertyType == typeof(double?))
+                                        {
+                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",", ".");
+                                        }
+                                        else if (entity_property.PropertyType == typeof(decimal) || entity_property.PropertyType == typeof(decimal?))
+                                        {
+                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",", ".");
+                                        }
+                                        else if (entity_property.PropertyType == typeof(DateTime) || entity_property.PropertyType == typeof(DateTime?))
+                                        {
+                                            if (value == null)
                                             {
-                                                insertintovalue[i] = value == null ? "NULL" : value + "";
-                                            }
-                                            else if (entity_property.PropertyType == typeof(bool) || entity_property.PropertyType == typeof(bool?))
-                                            {
-                                                insertintovalue[i] = value == null ? "NULL" : value == "False" ? "0" : "1";
-                                            }
-                                            else if (entity_property.PropertyType == typeof(double) || entity_property.PropertyType == typeof(double?))
-                                            {
-                                                insertintovalue[i] = value == null ? "NULL" : value + "".Replace(",", ".");
-                                            }
-                                            else if (entity_property.PropertyType == typeof(decimal) || entity_property.PropertyType == typeof(decimal?))
-                                            {
-                                                insertintovalue[i] = value == null ? "NULL" : value + "".Replace(",", ".");
-                                            }
-                                            else if (entity_property.PropertyType == typeof(DateTime) || entity_property.PropertyType == typeof(DateTime?))
-                                            {
-                                                if (value == null)
-                                                {
-                                                    insertintovalue[i] = "NULL";
-                                                }
-                                                else
-                                                {
-                                                    insertintovalue[i] = "'" + string.Format("{0:yyyy-MM-dd hh:mm:ss}", (DateTime)value) + "'";
-
-                                                }
-                                            }
-                                            else if (nulltypes.Contains(entity_property.PropertyType))
-                                            {
-                                                insertintovalue[i] = value == null ? "NULL" : "'" + value + "'";
+                                                insertintovalue[i] = "NULL";
                                             }
                                             else
                                             {
-                                                insertintovalue[i] = value == null ? "NULL" : "'" + value + "'";
+                                                insertintovalue[i] = "'" + string.Format("{0:yyyy-MM-dd hh:mm:ss}", (DateTime)value) + "'";
+
                                             }
                                         }
-
+                                        else if (nulltypes.Contains(entity_property.PropertyType))
+                                        {
+                                            insertintovalue[i] = value == null ? "NULL" : "'" + (value + "").Replace(",", ".") + "'";
+                                        }
+                                        else
+                                        {
+                                            insertintovalue[i] = value == null ? "NULL" : "'" + (value + "").Replace(",", ".") + "'";
+                                        }
                                     }
+
+                                    //}
                                     insertintovalue = insertintovalue.Where(a => a != null).ToArray();
                                     sqltemp_insertintovalues.Add("(" + string.Join(",", insertintovalue) + ")");
                                 }
