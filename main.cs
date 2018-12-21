@@ -1,3 +1,29 @@
+public static string MySQLEscape(string str)
+        {
+            return Regex.Replace(str, @"[\@\?\'\x00'""\b\n\r\t\cZ\\%_]",
+                delegate(Match match)
+                {
+                    string v = match.Value;
+                    switch (v)
+                    {
+                        case "\x00":            // ASCII NUL (0x00) character
+                            return "\\0";
+                        case "\b":              // BACKSPACE character
+                            return "\\b";
+                        case "\n":              // NEWLINE (linefeed) character
+                            return "\\n";
+                        case "\r":              // CARRIAGE RETURN character
+                            return "\\r";
+                        case "\t":              // TAB
+                            return "\\t";
+                        case "\u001A":          // Ctrl-Z
+                            return "\\Z";
+                        default:
+                            return "\\" + v;
+                    }
+                });
+        } 
+
 public static void BulkInsert<T>(this IList<T> entities) where T : class
         {
             var bd = new Models.Contexto();
@@ -54,7 +80,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                         }
                                     }
 
-                                    bool isforeingkey = customattributes.Any(a => a.GetType().Name == "ForeingKeyAttribute");
+                                    bool isforeingkey = customattributes.Any(a => a.GetType().Name == "ForeignKeyAttribute");
                                     bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
                                     bool isintornullint = property.PropertyType == typeof(int) ||
                                                              property.PropertyType == typeof(int?);
@@ -117,10 +143,12 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
 
                                         //if (!isprimarykey || !theyhavejustonekey)
                                         //{
-                                        var value = entity_property != null ? entity_property.GetValue(entity) : null;
+
+                                        //var objvalue = ;
+                                        var value = entity_property.GetValue(entity);
                                         if (entity_property.PropertyType == typeof(int) || entity_property.PropertyType == typeof(int?))
                                         {
-                                            insertintovalue[i] = value == null ? "NULL" : (value + "");
+                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",", ".");
                                         }
                                         else if (entity_property.PropertyType == typeof(bool) || entity_property.PropertyType == typeof(bool?))
                                         {
@@ -132,7 +160,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                         }
                                         else if (entity_property.PropertyType == typeof(decimal) || entity_property.PropertyType == typeof(decimal?))
                                         {
-                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",", ".");
+                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",",".");
                                         }
                                         else if (entity_property.PropertyType == typeof(DateTime) || entity_property.PropertyType == typeof(DateTime?))
                                         {
@@ -142,17 +170,13 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                             }
                                             else
                                             {
-                                                insertintovalue[i] = "'" + string.Format("{0:yyyy-MM-dd hh:mm:ss}", (DateTime)value) + "'";
+                                                insertintovalue[i] = "'" + string.Format("{0:yyyy-MM-dd hh:mm:ss}", Convert.ToDateTime(value)) + "'";
 
                                             }
                                         }
-                                        else if (nulltypes.Contains(entity_property.PropertyType))
-                                        {
-                                            insertintovalue[i] = value == null ? "NULL" : "'" + (value + "").Replace(",", ".") + "'";
-                                        }
                                         else
                                         {
-                                            insertintovalue[i] = value == null ? "NULL" : "'" + (value + "").Replace(",", ".") + "'";
+                                            insertintovalue[i] = value == null ? "NULL" : "'" + Extensoras.MySQLEscape(value + "") + "'";
                                         }
                                     }
                                     //    }
@@ -167,7 +191,6 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                     bd.Database.ExecuteSqlCommand(string.Format("ALTER TABLE `{0}` ADD COLUMN `{1}` VARCHAR(255) NULL;", tabletoinsert_name, sqlinsert_tempfieldname));
                                     bd.Database.ExecuteSqlCommand(string.Format("ALTER TABLE `{0}` ADD INDEX `tempindex_bulk_unique_id` (`{1}`);", tabletoinsert_name, sqlinsert_tempfieldname));
                                 }
-
 
                                 string table_firstvalues = sqlinsert_values[0];
                                 sqlinsert_values.RemoveAt(0);
@@ -316,7 +339,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                             }
                                         }
                                     }
-                                    bool isforeingkey = customattributes.Any(a => a.GetType().Name == "ForeingKeyAttribute");
+                                    bool isforeingkey = customattributes.Any(a => a.GetType().Name == "ForeignKeyAttribute");
                                     bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
                                     bool isintornullint = property.PropertyType == typeof(int) ||
                                                               property.PropertyType == typeof(int?);
@@ -417,7 +440,8 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                     for (int i = 0; i < entity_properties.Length; i++)
                                     {
                                         var entity_property = entity_properties[i];
-                                        var value = entity_property.GetValue(entity);
+                                        var objvalue = entity_property.GetValue(entity);
+                                        var value = objvalue != null ? Extensoras.MySQLEscape(objvalue + "") : null;
                                         //var customattributes = entity_property.GetCustomAttributes(false);
                                         //bool isprimarykey = entity_property.GetCustomAttributes(false).Any(a => a.GetType().Name == "KeyAttribute");
                                         //bool isvalidproperty = !customattributes.Any(a => a.GetType().Name == "NotMappedAttribute");
@@ -437,7 +461,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                         }
                                         else if (entity_property.PropertyType == typeof(decimal) || entity_property.PropertyType == typeof(decimal?))
                                         {
-                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",", ".");
+                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",",".");
                                         }
                                         else if (entity_property.PropertyType == typeof(DateTime) || entity_property.PropertyType == typeof(DateTime?))
                                         {
@@ -447,17 +471,13 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                             }
                                             else
                                             {
-                                                insertintovalue[i] = "'" + string.Format("{0:yyyy-MM-dd hh:mm:ss}", (DateTime)value) + "'";
+                                                insertintovalue[i] = "'" + string.Format("{0:yyyy-MM-dd hh:mm:ss}", Convert.ToDateTime(value)) + "'";
 
                                             }
                                         }
-                                        else if (nulltypes.Contains(entity_property.PropertyType))
-                                        {
-                                            insertintovalue[i] = value == null ? "NULL" : "'" + (value + "").Replace(",", ".") + "'";
-                                        }
                                         else
                                         {
-                                            insertintovalue[i] = value == null ? "NULL" : "'" + (value + "").Replace(",", ".") + "'";
+                                            insertintovalue[i] = value == null ? "NULL" : "'" + Extensoras.MySQLEscape(value + "") + "'";
                                         }
                                     }
 
