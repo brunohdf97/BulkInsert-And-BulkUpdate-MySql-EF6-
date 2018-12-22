@@ -1,6 +1,6 @@
 This repository contains two methods that allow you to execute BulkInsert and BulkUpdate using MySql and EF6+. These are simple but functional functions, we also use transaction on both methods.
 
-Entity Framework is a great tool when talking about a short pack of informations but when we grow up it, it's become slow and does not fulfill our goals anymore. 
+Entity Framework is a great tool when talking about a short pack of informations but when we grow up on it, it's become slow and does not fulfill our goals anymore. 
 
 How does Entity Framework save the data when we do a DbSet<T>.AddRange(List<T>) or DbSet<T>.Add(T)?
 - Basically, he creates a "INSERT INTO table (values)" and if you have a table with an AUTO_INCREMENT column he'll also execute a command (using MySql in my case) like "
