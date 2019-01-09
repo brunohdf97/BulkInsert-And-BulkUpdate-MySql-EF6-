@@ -160,7 +160,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                         }
                                         else if (entity_property.PropertyType == typeof(decimal) || entity_property.PropertyType == typeof(decimal?))
                                         {
-                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",",".");
+                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",", ".");
                                         }
                                         else if (entity_property.PropertyType == typeof(DateTime) || entity_property.PropertyType == typeof(DateTime?))
                                         {
@@ -183,7 +183,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                     //}
                                     insertintovalue[entity_properties.Length] = "'" + sqlinsert_uniquedt + "'";
                                     insertintovalue = insertintovalue.Where(a => a != null).ToArray();
-                                    sqlinsert_values.Add("(" + string.Join(",", insertintovalue) + ")");
+                                    sqlinsert_values.Add("(" + string.Join(",", insertintovalue, 0, insertintovalue.Length) + ")");
                                 }
 
                                 if (!bd.ExisteCampo(tabletoinsert_name, sqlinsert_tempfieldname))
@@ -194,13 +194,23 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
 
                                 string table_firstvalues = sqlinsert_values[0];
                                 sqlinsert_values.RemoveAt(0);
-                                string sqlinsert = string.Format("INSERT INTO {0} {1} VALUES {2}, {3};", "`" + tabletoinsert_name + "`", "(" + string.Join(",", sqlinsert_properties) + ")", table_firstvalues, string.Join(",", sqlinsert_values));
+
+                                string sqlinsert = string.Format("INSERT INTO {0} {1} VALUES {2}, {3};", 
+                                    "`" + tabletoinsert_name + "`", 
+                                    "(" + string.Join(",", sqlinsert_properties,0, sqlinsert_properties.Length) + ")", 
+                                    table_firstvalues, 
+                                    string.Join(",", sqlinsert_values));
+
                                 int numrowinserted = bd.Database.ExecuteSqlCommand(sqlinsert);
 
                                 if (sqlinsert_primarykeys.Count > 0)
                                 {
                                     string sql_select = string.Format("SELECT CONCAT({0}) AS chaves FROM {1} WHERE {2} = {3}",
-                                        string.Join(",", sqlinsert_primarykeys), tabletoinsert_name, sqlinsert_tempfieldname, "'" + sqlinsert_uniquedt + "'");
+                                        string.Join(",", sqlinsert_primarykeys), 
+                                        tabletoinsert_name, 
+                                        sqlinsert_tempfieldname, 
+                                        "'" + sqlinsert_uniquedt + "'");
+
                                     var primarykeys_inserted = bd.Database.SqlQuery<string>(sql_select).ToList();
 
                                     string[] newsqlinsert_primarykeys = sqlinsert_primarykeys.Where(a => a != "';'").ToArray();
@@ -461,7 +471,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                         }
                                         else if (entity_property.PropertyType == typeof(decimal) || entity_property.PropertyType == typeof(decimal?))
                                         {
-                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",",".");
+                                            insertintovalue[i] = value == null ? "NULL" : (value + "").Replace(",", ".");
                                         }
                                         else if (entity_property.PropertyType == typeof(DateTime) || entity_property.PropertyType == typeof(DateTime?))
                                         {
@@ -491,22 +501,31 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                 sqltemp_primarykeys = sqltemp_primarykeys.Where(a => a != null).ToArray();
                                 sqltemp_properties = sqltemp_properties.Where(a => a != null).ToArray();
 
-                                string stemptable_properties = string.Join(",", sqltemp_properties);
-                                string stemptable_keys = string.Join(",", sqltemp_primarykeys);
+                                string stemptable_properties = string.Join(",", sqltemp_properties, 0, sqltemp_properties.Length).Trim();
+                                string stemptable_keys = sqltemp_primarykeys.Length > 0 ? string.Join(",", sqltemp_primarykeys,0, sqltemp_primarykeys.Length) : "";
 
                                 string sqltemptable = string.Format("CREATE TEMPORARY TABLE {0}" +
-                                                                    "( {1}, PRIMARY KEY {2} ) ENGINE=InnoDB DEFAULT CHARSET=latin1;", "`" + tabletemp_name + "`", stemptable_properties, "(" + stemptable_keys + ")");
+                                    "( {1}  {2} ) ENGINE=InnoDB DEFAULT CHARSET=utf8;", "`" + tabletemp_name + "`", stemptable_properties, 
+                                    sqltemp_primarykeys.Length > 0 ? ", PRIMARY KEY (" + stemptable_keys + ")" : "");
                                 bd.Database.ExecuteSqlCommand(sqltemptable);
 
                                 string table_firstvalues = sqltemp_insertintovalues[0];
                                 sqltemp_insertintovalues.RemoveAt(0);
-                                string sqlinsert = string.Format("INSERT INTO {0} ({1}) VALUES {2}, {3};", "`" + tabletemp_name + "`", string.Join(",", sqltemp_insertintoproperties), table_firstvalues, string.Join(", ", sqltemp_insertintovalues));
+
+                                string sqlinsert = string.Format("INSERT INTO {0} ({1}) VALUES {2}, {3};",
+                                    "`" + tabletemp_name + "`",
+                                    string.Join(",", sqltemp_insertintoproperties, 0, sqltemp_insertintoproperties.Length),
+                                    table_firstvalues, string.Join(", ", sqltemp_insertintovalues));
+
                                 bd.Database.ExecuteSqlCommand(sqlinsert);
                                 temptable_created = true;
 
                                 string sqlupdate = string.Format("UPDATE {0} AS a " +
                                                                 "INNER JOIN {1} AS b ON {2}" +
-                                                                " SET {3};", "`" + tabletoupdate_name + "`", "`" + tabletemp_name + "`", string.Join(" AND ", sqlupdate_innerjoin_where), string.Join(",", sqlupdate_setters));
+                                                                " SET {3};", "`" + tabletoupdate_name + "`", 
+                                                                "`" + tabletemp_name + "`", 
+                                                                string.Join(" AND ", sqlupdate_innerjoin_where, 0, sqlupdate_innerjoin_where.Length), 
+                                                                string.Join(",", sqlupdate_setters,0, sqlupdate_setters.Length));
 
                                 bd.Database.ExecuteSqlCommand(sqlupdate);
                                 bd.Database.ExecuteSqlCommand("DROP TABLE " + tabletemp_name);
