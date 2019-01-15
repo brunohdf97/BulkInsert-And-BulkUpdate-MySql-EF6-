@@ -10,7 +10,7 @@ SELECT LAST_INSERT_ID()" to fulfill your object.
 
 So, how does the method sort out this trouble?
 - First thing first thing, i'm say we continuos to use Entity Framework but the main difference it's the way we chooce to save the data.
-- On the BulkInsert Method we read all the objects passed (whom usually it's a model) and then create only one SQL statement which does a compatible Bulk Operation in MySql (my case). We also create a column called "bulk_unique_id" and an unique Guid to insert into this column, when the rows are inserted we select all thoses rows again into a separed "SELECT CONCAT" statement (in my case) and then fulfill the objects passed.
+- On the BulkInsert Method we read all the objects passed (whom usually it's a model) and then create only one SQL statement which does a compatible Bulk Operation in MySql (my case). We also create a column called "bulk_unique_id" and an unique Guid to insert into this column, when the rows are inserted we select all those rows again into a separed "SELECT CONCAT" statement (in my case) and then fulfill the objects passed.
 - On the BulkUpdate Method not only do we create an unique guid but also a temp table to insert our values and then make an update with INNER JOIN which is faster than update by row to row.
 
 This has been intended developed to my needs and the project is opened to who concerns to improve it or change it for a better solution that will worth to the community.
