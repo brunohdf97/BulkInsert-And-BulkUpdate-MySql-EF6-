@@ -1,3 +1,30 @@
+public bool ExistsFieldOnTable(string table_name, string field_name)
+        {
+
+            try
+            {
+                using (var context = new Contexto())
+                using (var command = context.Database.GetDbConnection().CreateCommand())
+                {
+                    command.CommandText = @"SELECT " + nome_campo + " FROM " + table_name + " LIMIT 0,1 "; ;
+                    context.Database.OpenConnection();
+                    using (var result = command.ExecuteReader())
+                    {
+
+                        var r1 = result.GetString(0);
+                        if (r1 != null && r1.Length > 0)
+                            return true;
+
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
 public static string MySQLEscape(string str)
         {
             return Regex.Replace(str, @"[\@\?\'\x00'""\b\n\r\t\cZ\\%_]",
@@ -186,7 +213,7 @@ public static void BulkInsert<T>(this IList<T> entities) where T : class
                                     sqlinsert_values.Add("(" + string.Join(",", insertintovalue, 0, insertintovalue.Length) + ")");
                                 }
 
-                                if (!bd.ExisteCampo(tabletoinsert_name, sqlinsert_tempfieldname))
+                                if (!ExistsFieldOnTable(tabletoinsert_name, sqlinsert_tempfieldname))
                                 {
                                     bd.Database.ExecuteSqlCommand(string.Format("ALTER TABLE `{0}` ADD COLUMN `{1}` VARCHAR(255) NULL;", tabletoinsert_name, sqlinsert_tempfieldname));
                                     bd.Database.ExecuteSqlCommand(string.Format("ALTER TABLE `{0}` ADD INDEX `tempindex_bulk_unique_id` (`{1}`);", tabletoinsert_name, sqlinsert_tempfieldname));
