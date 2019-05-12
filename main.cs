@@ -6,7 +6,7 @@ public bool ExistsFieldOnTable(string table_name, string field_name)
                 using (var context = new Contexto())
                 using (var command = context.Database.GetDbConnection().CreateCommand())
                 {
-                    command.CommandText = @"SELECT " + nome_campo + " FROM " + table_name + " LIMIT 0,1 "; ;
+                    command.CommandText = @"SELECT " + field_name + " FROM " + table_name + " LIMIT 0,1 "; ;
                     context.Database.OpenConnection();
                     using (var result = command.ExecuteReader())
                     {
