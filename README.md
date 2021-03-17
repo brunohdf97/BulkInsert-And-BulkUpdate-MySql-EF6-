@@ -1,4 +1,4 @@
-## BulkInsert-And-BulkUpdate-MySql-EF6 (.NET 4.5+, it doesnt has effect on EF Core)
+## BulkInsert-And-BulkUpdate-MySql-EF6 (.NET 4.5+, it doesn't have effect on EF Core)
 
 This repository contains two methods that allow you to execute BulkInsert and BulkUpdate using MySql and EF6+. These are simples but functional functions.
 
